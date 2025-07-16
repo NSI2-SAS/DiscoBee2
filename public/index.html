@@ -60,6 +60,16 @@
             padding: 10px;
             border-radius: 5px;
         }
+        .subnet-group {
+            margin-bottom: 20px;
+            background-color: #d5d5d5;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .subnet-header {
+            cursor: pointer;
+            margin: 0;
+        }
         .copy-button {
             padding: 5px 10px;
             background-color: #007bff;
@@ -107,27 +117,47 @@
 
         function displaySources(sources) {
             sourceList.innerHTML = '';
-            const instances = groupByInstance(sources);
-            
-            for (const [instance, instanceSources] of Object.entries(instances)) {
-                const instanceDiv = document.createElement('div');
-                instanceDiv.className = 'instance-group';
-                instanceDiv.innerHTML = `<h2>${instance}</h2>`;
-                
-                const ul = document.createElement('ul');
-                instanceSources.forEach(source => {
-                    const li = document.createElement('li');
-                    li.innerHTML = `
-                        <strong>Name:</strong> ${source.name}
-                        <button class="copy-button" data-name="${source.name}">Copy</button><br>
-                        <strong>IP:</strong> ${source.address}:${source.port}<br>
-                        <strong>Groups:</strong> ${source.groups.join(', ')}
-                    `;
-                    ul.appendChild(li);
+            const subnets = groupBySubnet(sources);
+
+            for (const [subnet, hosts] of Object.entries(subnets)) {
+                const subnetDiv = document.createElement('div');
+                subnetDiv.className = 'subnet-group';
+
+                const header = document.createElement('h2');
+                header.className = 'subnet-header';
+                header.textContent = subnet;
+
+                const hostContainer = document.createElement('div');
+                hostContainer.style.display = 'none';
+
+                header.addEventListener('click', () => {
+                    hostContainer.style.display = hostContainer.style.display === 'none' ? '' : 'none';
                 });
-                
-                instanceDiv.appendChild(ul);
-                sourceList.appendChild(instanceDiv);
+
+                for (const [instance, instanceSources] of Object.entries(hosts)) {
+                    const instanceDiv = document.createElement('div');
+                    instanceDiv.className = 'instance-group';
+                    instanceDiv.innerHTML = `<h3>${instance}</h3>`;
+
+                    const ul = document.createElement('ul');
+                    instanceSources.forEach(source => {
+                        const li = document.createElement('li');
+                        li.innerHTML = `
+                            <strong>Name:</strong> ${source.name}
+                            <button class="copy-button" data-name="${source.name}">Copy</button><br>
+                            <strong>IP:</strong> ${source.address}:${source.port}<br>
+                            <strong>Groups:</strong> ${source.groups.join(', ')}
+                        `;
+                        ul.appendChild(li);
+                    });
+
+                    instanceDiv.appendChild(ul);
+                    hostContainer.appendChild(instanceDiv);
+                }
+
+                subnetDiv.appendChild(header);
+                subnetDiv.appendChild(hostContainer);
+                sourceList.appendChild(subnetDiv);
             }
 
             // Add event listeners to copy buttons
@@ -136,13 +166,16 @@
             });
         }
 
-        function groupByInstance(sources) {
+        function groupBySubnet(sources) {
             return sources.reduce((acc, source) => {
-                const instance = source.address;
-                if (!acc[instance]) {
-                    acc[instance] = [];
+                const subnet = source.address.split('.').slice(0, 3).join('.') + '.0/24';
+                if (!acc[subnet]) {
+                    acc[subnet] = {};
                 }
-                acc[instance].push(source);
+                if (!acc[subnet][source.address]) {
+                    acc[subnet][source.address] = [];
+                }
+                acc[subnet][source.address].push(source);
                 return acc;
             }, {});
         }
@@ -151,15 +184,21 @@
             const searchTerm = searchInput.value.toLowerCase();
             const sourceItems = sourceList.getElementsByTagName('li');
             const instanceGroups = sourceList.getElementsByClassName('instance-group');
-            
+            const subnetGroups = sourceList.getElementsByClassName('subnet-group');
+
             Array.from(sourceItems).forEach(item => {
                 const text = item.textContent.toLowerCase();
                 item.style.display = text.includes(searchTerm) ? '' : 'none';
             });
 
             Array.from(instanceGroups).forEach(group => {
-                const visibleItems = group.querySelectorAll('li[style="display: """]');
+                const visibleItems = Array.from(group.getElementsByTagName('li')).filter(li => li.style.display !== 'none');
                 group.style.display = visibleItems.length > 0 ? '' : 'none';
+            });
+
+            Array.from(subnetGroups).forEach(group => {
+                const visibleInstances = Array.from(group.getElementsByClassName('instance-group')).filter(inst => inst.style.display !== 'none');
+                group.style.display = visibleInstances.length > 0 ? '' : 'none';
             });
         }
 

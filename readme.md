@@ -45,8 +45,15 @@ WantedBy=multi-user.target
    ```sudo systemctl start discobee.service ```
 ## Development
 Clone this Repository and then run the following commands:
- npm install 
+ npm install
  npm run start
+
+### Optional Proxy
+If you want to filter the sources returned by the discovery server, start the
+proxy using:
+```
+npm run proxy
+```
 
 
 ## API

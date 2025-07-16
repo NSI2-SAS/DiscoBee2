@@ -4,7 +4,8 @@
   "main": "server.js",
   "scripts": {
     "build": "pkg .",
-    "start": "node server.js"
+    "start": "node server.js",
+    "proxy": "node ndi-proxy.js"
   },
   "bin": "server.js",
   "keywords": [],

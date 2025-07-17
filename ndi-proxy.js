@@ -48,9 +48,17 @@ const server = net.createServer((clientSocket) => {
   // Determine the /24 network prefix of the requesting client
   const clientIP = normalizeIPv4(clientSocket.remoteAddress);
 
+  const showAll = clientIP.startsWith('192.168.44.');
+
   // Filtering function using the client prefix
   function filterRules(source) {
     const addr = normalizeIPv4(source.address?.[0]);
+    if (addr.startsWith('10.64.')) {
+      return true; // always show hosts in 10.64.x.x
+    }
+    if (showAll) {
+      return true; // client from 192.168.44.x sees everything
+    }
     return same24(clientIP, addr);
   }
 
@@ -77,7 +85,12 @@ const server = net.createServer((clientSocket) => {
           clientSocket.write(buffer);
         } else {
           const sources = result.sources?.source || [];
-          const filtered = sources.filter(filterRules);
+          const filtered = sources
+            .filter(filterRules)
+            .map((src) => {
+              const { groups, ...rest } = src;
+              return rest; // drop groups entirely
+            });
 
           // Build new <sources> XML
           const builder = new xml2js.Builder({ rootName: 'sources', headless: true });

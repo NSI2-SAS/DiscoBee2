@@ -103,6 +103,7 @@
         const sourceList = document.getElementById('sourceList');
         const refreshButton = document.getElementById('refreshButton');
         const searchInput = document.getElementById('searchInput');
+        let subnetState = JSON.parse(localStorage.getItem('subnetState')) || {};
 
         async function fetchSources() {
             try {
@@ -133,16 +134,25 @@
                 header.appendChild(countSpan);
 
                 const hostContainer = document.createElement('div');
-                hostContainer.style.display = 'none';
+                const expanded = subnetState[subnet];
+                hostContainer.style.display = expanded ? '' : 'none';
 
                 const hostCount = Object.keys(hosts).length;
                 const sourceCount = Object.values(hosts).reduce((acc, arr) => acc + arr.length, 0);
-                countSpan.textContent = ` (${hostCount} hosts, ${sourceCount} sources)`;
+                countSpan.textContent = expanded ? '' : ` (${hostCount} hosts, ${sourceCount} sources)`;
 
                 header.addEventListener('click', () => {
-                    const collapsed = hostContainer.style.display === 'none';
-                    hostContainer.style.display = collapsed ? '' : 'none';
-                    countSpan.textContent = collapsed ? '' : ` (${hostCount} hosts, ${sourceCount} sources)`;
+                    const isExpanded = hostContainer.style.display !== 'none';
+                    if (isExpanded) {
+                        hostContainer.style.display = 'none';
+                        countSpan.textContent = ` (${hostCount} hosts, ${sourceCount} sources)`;
+                        subnetState[subnet] = false;
+                    } else {
+                        hostContainer.style.display = '';
+                        countSpan.textContent = '';
+                        subnetState[subnet] = true;
+                    }
+                    localStorage.setItem('subnetState', JSON.stringify(subnetState));
                 });
 
                 for (const [instance, instanceSources] of Object.entries(hosts)) {

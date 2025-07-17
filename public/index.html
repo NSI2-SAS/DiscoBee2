@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DiscoBee by ByteHive</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.21.1/axios.min.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -115,8 +114,11 @@
 
         async function fetchSources() {
             try {
-                const response = await axios.get('/api/sources');
-                const sources = response.data;
+                const response = await fetch('/api/sources');
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                const sources = await response.json();
                 displaySources(sources);
                 filterSources();
             } catch (error) {

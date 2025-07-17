@@ -12,14 +12,27 @@ const NDI_PORT = parseInt(process.env.NDI_PORT, 10) || 5959;
 const XML_TIMEOUT_MS = 3000;
 
 /**
- * Apply filtering rules to a parsed source object.
- * @param {Object} source
+ * Normalize IPv4 addresses that may be wrapped in an IPv6 notation
+ * like ::ffff:192.168.1.10
+ * @param {string} ip
+ * @returns {string}
+ */
+function normalizeIPv4(ip) {
+  if (!ip) return '';
+  return ip.startsWith('::ffff:') ? ip.substring(7) : ip;
+}
+
+/**
+ * Compare two IPv4 addresses and check if they belong to the same /24
+ * subnet (first three octets match).
+ * @param {string} ip1
+ * @param {string} ip2
  * @returns {boolean}
  */
-function filterRules(source) {
-  // Example rule: only allow sources in the "Video" group
-  const groups = source.groups[0].group;
-  return groups.includes('Video');
+function same24(ip1, ip2) {
+  const [a1, b1, c1] = normalizeIPv4(ip1).split('.');
+  const [a2, b2, c2] = normalizeIPv4(ip2).split('.');
+  return a1 === a2 && b1 === b2 && c1 === c2;
 }
 
 // Create a TCP server to intercept client connections
@@ -31,6 +44,15 @@ const server = net.createServer((clientSocket) => {
 
   // Relay client->server traffic unmodified
   clientSocket.pipe(serverSocket);
+
+  // Determine the /24 network prefix of the requesting client
+  const clientIP = normalizeIPv4(clientSocket.remoteAddress);
+
+  // Filtering function using the client prefix
+  function filterRules(source) {
+    const addr = normalizeIPv4(source.address?.[0]);
+    return same24(clientIP, addr);
+  }
 
   // Buffer for server->client data until full <sources> block
   let buffer = Buffer.alloc(0);

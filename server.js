@@ -5,6 +5,21 @@ const path = require('path');
 const app = express();
 const port = 80;
 
+// Helper to log TCP messages in the form {source -> destination} message
+const logTCP = (socket, fromServer, data) => {
+  try {
+    const src = fromServer
+      ? `${socket.remoteAddress}:${socket.remotePort}`
+      : `${socket.localAddress}:${socket.localPort}`;
+    const dest = fromServer
+      ? `${socket.localAddress}:${socket.localPort}`
+      : `${socket.remoteAddress}:${socket.remotePort}`;
+    console.log(`{${src} -> ${dest}} ${data.toString()}`);
+  } catch (e) {
+    console.log('Failed to log TCP message:', e);
+  }
+};
+
 let persistentClient = null;
 let isConnecting = false;
 
@@ -69,6 +84,7 @@ const getSources = async () => {
       let chunks = "";
       
       const dataHandler = async (chunk) => {
+        logTCP(client, true, chunk);
         chunks += chunk.toString();
         
         if (chunks.includes("<sources>") && chunks.includes("</sources>")) {
@@ -99,6 +115,7 @@ const getSources = async () => {
 
       let message = Buffer.alloc(9);
       message.fill("<query/>", 0, 8);
+      logTCP(client, false, message);
       client.write(message);
     });
   } catch (error) {

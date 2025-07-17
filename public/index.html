@@ -70,6 +70,13 @@
             cursor: pointer;
             margin: 0;
         }
+        .toggle-button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 5px;
+        }
         .copy-button {
             padding: 5px 10px;
             background-color: #007bff;
@@ -127,14 +134,23 @@
 
                 const header = document.createElement('h2');
                 header.className = 'subnet-header';
-                header.textContent = subnet;
+
+                const expanded = subnetState[subnet];
+
+                const toggleButton = document.createElement('button');
+                toggleButton.className = 'toggle-button';
+                toggleButton.textContent = expanded ? '▼' : '►';
+                header.appendChild(toggleButton);
+
+                const titleSpan = document.createElement('span');
+                titleSpan.textContent = subnet;
+                header.appendChild(titleSpan);
 
                 const countSpan = document.createElement('span');
                 countSpan.className = 'subnet-count';
                 header.appendChild(countSpan);
 
                 const hostContainer = document.createElement('div');
-                const expanded = subnetState[subnet];
                 hostContainer.style.display = expanded ? '' : 'none';
 
                 const hostCount = Object.keys(hosts).length;
@@ -146,10 +162,12 @@
                     if (isExpanded) {
                         hostContainer.style.display = 'none';
                         countSpan.textContent = ` (${hostCount} hosts, ${sourceCount} sources)`;
+                        toggleButton.textContent = '►';
                         subnetState[subnet] = false;
                     } else {
                         hostContainer.style.display = '';
                         countSpan.textContent = '';
+                        toggleButton.textContent = '▼';
                         subnetState[subnet] = true;
                     }
                     localStorage.setItem('subnetState', JSON.stringify(subnetState));

@@ -1,0 +1,9 @@
+filters:
+  - range: 10.100.15.0/24
+    name: tutu
+    default: share
+    authorized:
+      - 10.100.15.0/24
+  - range: 10.64.0.0/16
+    name: ten64
+    default: share

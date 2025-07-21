@@ -124,6 +124,14 @@ const server = net.createServer((socket) => {
   const ip = socket.remoteAddress.replace(/^::ffff:/, '');
   hosts.set(socket, ip);
 
+  socket.on('error', (err) => {
+    if (err.code === 'EPIPE' || err.code === 'ECONNRESET') {
+      hosts.delete(socket);
+    } else {
+      console.error('Socket error', err);
+    }
+  });
+
   socket.on('data', async (data) => {
     const str = data.toString();
     if (str.includes('<query/>')) {

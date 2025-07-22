@@ -1,137 +1,188 @@
 const express = require('express');
-const Net = require('net');
-const xml2js = require('xml2js');
+const net = require('net');
+const fs = require('fs');
 const path = require('path');
+const yaml = require('js-yaml');
+const xml2js = require('xml2js');
+
+// Ports for the two services
+const WEB_PORT = parseInt(process.env.WEB_PORT || '80', 10);
+const DISCOVERY_PORT = parseInt(process.env.PORT || '5959', 10);
+const CONFIG_FILE = process.env.CONFIG || 'config.yml';
+
 const app = express();
-const port = 80;
 
-// Helper to log TCP messages in the form {source -> destination} message
-const logTCP = (socket, fromServer, data) => {
+// ---------------------------------------------------------------------------
+// Configuration helpers
+// ---------------------------------------------------------------------------
+function loadFilters(file) {
   try {
-    const src = fromServer
-      ? `${socket.remoteAddress}:${socket.remotePort}`
-      : `${socket.localAddress}:${socket.localPort}`;
-    const dest = fromServer
-      ? `${socket.localAddress}:${socket.localPort}`
-      : `${socket.remoteAddress}:${socket.remotePort}`;
-    console.log(`{${src} -> ${dest}} ${data.toString()}`);
+    const content = fs.readFileSync(file, 'utf8');
+    const cfg = yaml.load(content);
+    return Array.isArray(cfg?.filters) ? cfg.filters : [];
   } catch (e) {
-    console.log('Failed to log TCP message:', e);
+    console.error('Failed to load config:', e.message);
+    return [];
   }
-};
+}
+const FILTERS = loadFilters(CONFIG_FILE);
 
-let persistentClient = null;
-let isConnecting = false;
+function ipToInt(ip) {
+  return ip.split('.').reduce((acc, oct) => (acc << 8) + parseInt(oct, 10), 0) >>> 0;
+}
 
-const parseXml = (xml) => {
-  return new Promise((resolve, reject) => {
-    xml2js.parseString(xml, (err, result) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(result);
+function cidrMatch(ip, cidr) {
+  const [range, maskStr] = cidr.split('/');
+  const mask = maskStr ? parseInt(maskStr, 10) : 32;
+  const ipInt = ipToInt(ip);
+  const rangeInt = ipToInt(range);
+  const maskInt = mask === 0 ? 0 : (~0 << (32 - mask)) >>> 0;
+  return (ipInt & maskInt) === (rangeInt & maskInt);
+}
+
+function findFilter(filters, ip) {
+  let best = null;
+  let bestMask = -1;
+  for (const f of filters) {
+    if (f.range && cidrMatch(ip, f.range)) {
+      const mask = parseInt(f.range.split('/')[1] || '32', 10);
+      if (mask > bestMask) {
+        best = f;
+        bestMask = mask;
       }
-    });
+    }
+  }
+  return best;
+}
+
+function getGroupName(ip) {
+  const f = findFilter(FILTERS, ip);
+  return f?.name || 'unknown';
+}
+
+function canShare(filters, sourceIp, hostIp) {
+  const f = findFilter(filters, sourceIp);
+  if (!f) return true;
+  const def = (f.default || 'share').toLowerCase();
+  if (def === 'share') return true;
+  if (!Array.isArray(f.authorized)) return false;
+  return f.authorized.some((cidr) => cidrMatch(hostIp, cidr)) || cidrMatch(hostIp, f.range);
+}
+
+function buildSourceXml(src) {
+  const builder = new xml2js.Builder({ headless: true, rootName: 'source', renderOpts: { pretty: false } });
+  return builder.buildObject({
+    name: src.name,
+    metadata: src.metadata || '',
+    address: src.address,
+    port: src.port,
+    groups: { group: src.groups }
   });
-};
+}
 
-const ensureConnection = () => {
-  return new Promise((resolve, reject) => {
-    if (persistentClient && !persistentClient.destroyed) {
-      resolve(persistentClient);
-    } else if (!isConnecting) {
-      isConnecting = true;
-      persistentClient = new Net.Socket();
-      
-      persistentClient.connect({ port: 5959, host: '127.0.0.1' }, () => {
-        console.log('Connection established with the NDI discovery server.');
-        persistentClient.setKeepAlive(true, 1000);
-        isConnecting = false;
-        resolve(persistentClient);
-      });
+function buildAddSource(src) {
+  return `<add_source>${buildSourceXml(src)}</add_source>`;
+}
 
-      persistentClient.on('error', (error) => {
-        console.log('Error:', error);
-        isConnecting = false;
-        persistentClient = null;
-        reject(error);
-      });
+function buildRemoveSource(src) {
+  return `<remove_source>${buildSourceXml(src)}</remove_source>`;
+}
 
-      persistentClient.on('close', () => {
-        console.log('Connection closed');
-        persistentClient = null;
-      });
+function buildSources(list) {
+  const builder = new xml2js.Builder({ headless: true, rootName: 'sources', renderOpts: { pretty: false } });
+  const srcs = list.map((s) => ({
+    name: s.name,
+    metadata: s.metadata || '',
+    address: s.address,
+    port: s.port,
+    groups: { group: s.groups }
+  }));
+  return builder.buildObject({ source: srcs });
+}
+
+// ---------------------------------------------------------------------------
+// NDI Discovery server logic
+// ---------------------------------------------------------------------------
+const hosts = new Map(); // socket -> ip
+let sources = [];
+
+const discoveryServer = net.createServer((socket) => {
+  const ip = socket.remoteAddress.replace(/^::ffff:/, '');
+  hosts.set(socket, ip);
+
+  socket.on('error', (err) => {
+    if (err.code === 'EPIPE' || err.code === 'ECONNRESET') {
+      hosts.delete(socket);
     } else {
-      // Wait for the ongoing connection attempt to finish
-      const checkConnection = setInterval(() => {
-        if (!isConnecting) {
-          clearInterval(checkConnection);
-          if (persistentClient && !persistentClient.destroyed) {
-            resolve(persistentClient);
-          } else {
-            reject(new Error('Failed to establish connection'));
-          }
-        }
-      }, 100);
+      console.error('Socket error', err);
     }
   });
-};
 
-const getSources = async () => {
-  try {
-    const client = await ensureConnection();
-    return new Promise((resolve, reject) => {
-      let chunks = "";
-      
-      const dataHandler = async (chunk) => {
-        logTCP(client, true, chunk);
-        chunks += chunk.toString();
-        
-        if (chunks.includes("<sources>") && chunks.includes("</sources>")) {
-          client.removeListener('data', dataHandler);
-          
-          try {
-            const xmlData = chunks.substring(chunks.indexOf("<sources>"), chunks.indexOf("</sources>") + 10);
-            if (xmlData === "<sources></sources>") {
-              resolve([]);
-              return;
-            }
-            const result = await parseXml(xmlData);
-            const sources = result.sources.source;
-            const formattedSources = sources.map((item) => ({
-              name: item.name[0],
-              address: item.address[0],
-              port: item.port[0],
-              groups: item.groups[0].group
-            }));
-            resolve(formattedSources);
-          } catch (error) {
-            reject(error);
+  socket.on('data', async (data) => {
+    const str = data.toString();
+    if (str.includes('<query/>')) {
+      const allowed = sources.filter((s) => canShare(FILTERS, s.address, ip));
+      const xml = buildSources(allowed);
+      socket.write(`${xml}\0`);
+      return;
+    }
+
+    if (str.includes('<source>')) {
+      try {
+        const result = await xml2js.parseStringPromise(str);
+        const src = result.source;
+        const newSrc = {
+          name: src.name?.[0] || '',
+          metadata: '',
+          address: (src.address?.[0] === '0.0.0.0' ? ip : src.address?.[0]) || ip,
+          port: src.port?.[0] || '5961',
+          groups: src.groups?.[0]?.group || ['public'],
+          owner: ip
+        };
+        sources.push(newSrc);
+        for (const [sock, hIp] of hosts.entries()) {
+          if (sock === socket) continue;
+          if (canShare(FILTERS, newSrc.address, hIp)) {
+            sock.write(buildAddSource(newSrc));
           }
         }
-      };
+      } catch (e) {
+        console.error('Parse error', e);
+      }
+      return;
+    }
+  });
 
-      client.on('data', dataHandler);
+  socket.on('close', () => {
+    hosts.delete(socket);
+    const removed = sources.filter((s) => s.owner === ip);
+    sources = sources.filter((s) => s.owner !== ip);
+    for (const src of removed) {
+      for (const [sock, hIp] of hosts.entries()) {
+        if (canShare(FILTERS, src.address, hIp)) {
+          sock.write(buildRemoveSource(src));
+        }
+      }
+    }
+  });
+});
 
-      let message = Buffer.alloc(9);
-      message.fill("<query/>", 0, 8);
-      logTCP(client, false, message);
-      client.write(message);
-    });
-  } catch (error) {
-    console.error('Error in getSources:', error);
-    throw error;
-  }
-};
+discoveryServer.listen(DISCOVERY_PORT, () => {
+  console.log(`NDI Discovery server listening on ${DISCOVERY_PORT}`);
+});
 
-app.get('/api/sources', async (req, res) => {
-  try {
-    const sources = await getSources();
-    res.json(sources);
-  } catch (error) {
-    console.error('Failed to fetch NDI sources:', error);
-    res.status(500).json({ error: 'Failed to fetch NDI sources' });
-  }
+// ---------------------------------------------------------------------------
+// Express API
+// ---------------------------------------------------------------------------
+app.get('/api/sources', (req, res) => {
+  const data = sources.map((s) => ({
+    name: s.name,
+    address: s.address,
+    port: s.port,
+    groups: s.groups,
+    groupName: getGroupName(s.address)
+  }));
+  res.json(data);
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -139,6 +190,6 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
+app.listen(WEB_PORT, () => {
+  console.log(`Web server running at http://localhost:${WEB_PORT}`);
 });

@@ -131,7 +131,8 @@
             sourceList.innerHTML = '';
             const subnets = groupBySubnet(sources);
 
-            for (const [subnet, hosts] of Object.entries(subnets)) {
+            for (const [subnet, info] of Object.entries(subnets)) {
+                const hosts = info.hosts;
                 const subnetDiv = document.createElement('div');
                 subnetDiv.className = 'subnet-group';
 
@@ -146,7 +147,7 @@
                 header.appendChild(toggleButton);
 
                 const titleSpan = document.createElement('span');
-                titleSpan.textContent = subnet;
+                titleSpan.textContent = `${info.groupName} - ${subnet}`;
                 header.appendChild(titleSpan);
 
                 const countSpan = document.createElement('span');
@@ -222,12 +223,12 @@
                 }
 
                 if (!acc[subnet]) {
-                    acc[subnet] = {};
+                    acc[subnet] = { groupName: source.groupName || 'unknown', hosts: {} };
                 }
-                if (!acc[subnet][source.address]) {
-                    acc[subnet][source.address] = [];
+                if (!acc[subnet].hosts[source.address]) {
+                    acc[subnet].hosts[source.address] = [];
                 }
-                acc[subnet][source.address].push(source);
+                acc[subnet].hosts[source.address].push(source);
                 return acc;
             }, {});
         }

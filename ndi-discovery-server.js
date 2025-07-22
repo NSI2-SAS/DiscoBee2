@@ -11,11 +11,12 @@ function parseConfig(path) {
     let current = null;
     let inAuthorized = false;
     for (let line of lines) {
+      console.log("parsing ", line)
       if (!line.trim() || line.trim().startsWith('#')) continue;
       const indent = line.search(/\S|$/);
       line = line.trim();
       if (line === 'filters:') continue;
-      if (line.startsWith('- ')) {
+      if (line.startsWith('- ') && !inAuthorized) {
         current = {};
         filters.push(current);
         inAuthorized = false;
@@ -23,12 +24,14 @@ function parseConfig(path) {
         if (parts.length > 1) current[parts[0].trim()] = parts.slice(1).join(':').trim();
       } else if (current) {
         if (line.startsWith('authorized:')) {
+          console.log("auth")
           current.authorized = [];
           inAuthorized = true;
           const val = line.split(':')[1].trim();
           if (val) current.authorized.push(val);
         } else if (inAuthorized && line.startsWith('- ')) {
           current.authorized.push(line.slice(2).trim());
+          console.log(current)
         } else {
           const idx = line.indexOf(':');
           if (idx > -1) {
@@ -76,15 +79,20 @@ function findFilter(filters, sourceIp) {
 
 function canShare(filters, sourceIp, hostIp) {
   const f = findFilter(filters, sourceIp);
+  console.log("is filter ? for "+sourceIp)
   if (!f) return true;
   const def = (f.default || 'share').toLowerCase();
+  console.log("> can share ?")
   if (def === 'share') return true;
+  console.log("> checking authorized")
   if (!Array.isArray(f.authorized)) return false;
-  return f.authorized.some((cidr) => cidrMatch(hostIp, cidr));
+  r =  f.authorized.some((cidr) => { console.log("trying ",cidr) ; return cidrMatch(hostIp, cidr) }) || cidrMatch(hostIp, f.range);
+  console.log("> is "+hostIp+"aiuth :",r)
+  return r
 }
 
 function buildSourceXml(src) {
-  const builder = new xml2js.Builder({ headless: true, rootName: 'source' });
+  const builder = new xml2js.Builder({ headless: true, rootName: 'source', renderOpts:{pretty: false} });
   return builder.buildObject({
     name: src.name,
     metadata: src.metadata || '',
@@ -103,7 +111,7 @@ function buildRemoveSource(src) {
 }
 
 function buildSources(list) {
-  const builder = new xml2js.Builder({ headless: true, rootName: 'sources' });
+  const builder = new xml2js.Builder({ headless: true, rootName: 'sources',  renderOpts:{pretty: false} });
   const srcs = list.map((s) => ({
     name: s.name,
     metadata: s.metadata || '',
@@ -137,7 +145,7 @@ const server = net.createServer((socket) => {
     if (str.includes('<query/>')) {
       const allowed = sources.filter((s) => canShare(CONFIG.filters, s.address, ip));
       const xml = buildSources(allowed);
-      socket.write(xml);
+      socket.write(`${xml}\0`);
       return;
     }
 
@@ -153,6 +161,7 @@ const server = net.createServer((socket) => {
           groups: src.groups?.[0]?.group || ['public'],
           owner: ip
         };
+        console.log("adding",newSrc)
         sources.push(newSrc);
         for (const [sock, hIp] of hosts.entries()) {
           if (sock === socket) continue;

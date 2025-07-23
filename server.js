@@ -6,7 +6,7 @@ const yaml = require('js-yaml');
 const xml2js = require('xml2js');
 
 // Ports for the two services
-const WEB_PORT = parseInt(process.env.WEB_PORT || '80', 10);
+const WEB_PORT = parseInt(process.env.WEB_PORT || '8080', 10);
 const DISCOVERY_PORT = parseInt(process.env.PORT || '5959', 10);
 const CONFIG_FILE = process.env.CONFIG || 'config.yml';
 
@@ -90,11 +90,11 @@ function buildSourceXml(src) {
 }
 
 function buildAddSource(src) {
-  return `<add_source>${buildSourceXml(src)}</add_source>`;
+  return `<add_source>${buildSourceXml(src)}</add_source>\0`;
 }
 
 function buildRemoveSource(src) {
-  return `<remove_source>${buildSourceXml(src)}</remove_source>`;
+  return `<remove_source>${buildSourceXml(src)}</remove_source>\0`;
 }
 
 function buildSources(list) {
@@ -119,13 +119,16 @@ const pendingRemovals = new Map(); // ip -> timeout
 const discoveryServer = net.createServer((socket) => {
   const ip = socket.remoteAddress.replace(/^::ffff:/, '');
   hosts.set(socket, ip);
+  console.log("Hote connecte : ",ip)
   if (pendingRemovals.has(ip)) {
+    console.log("stopping timeout for :",ip)
     clearTimeout(pendingRemovals.get(ip));
     pendingRemovals.delete(ip);
   }
 
   socket.on('error', (err) => {
     if (err.code === 'EPIPE' || err.code === 'ECONNRESET') {
+      console.log("Host disconnected : ",ip)
       hosts.delete(socket);
     } else {
       console.error('Socket error', err);
@@ -134,6 +137,7 @@ const discoveryServer = net.createServer((socket) => {
 
   socket.on('data', async (data) => {
     const str = data.toString();
+    console.log("Data",str)
     if (str.includes('<query/>')) {
       const allowed = sources.filter((s) => canShare(FILTERS, s.address, ip));
       const xml = buildSources(allowed);
@@ -154,6 +158,7 @@ const discoveryServer = net.createServer((socket) => {
           owner: ip
         };
         sources.push(newSrc);
+        console.log("new source",newSrc)
         for (const [sock, hIp] of hosts.entries()) {
           if (sock === socket) continue;
           if (canShare(FILTERS, newSrc.address, hIp)) {
@@ -169,13 +174,16 @@ const discoveryServer = net.createServer((socket) => {
 
   socket.on('close', () => {
     hosts.delete(socket);
-    if ([...hosts.values()].includes(ip)) {
-      return; // another connection from this IP is still active
-    }
+    console.log("Connection closed ",ip)
+    //if ([...hosts.values()].includes(ip)) {
+    //  return; // another connection from this IP is still active
+    //}
+    console.log("strarting timeout for ",ip)
     const timeout = setTimeout(() => {
-      if ([...hosts.values()].includes(ip)) {
-        return; // reconnected during delay
-      }
+      //if ([...hosts.values()].includes(ip)) {
+      //  return; // reconnected during delay
+      //}
+      console.log("removing for",ip)
       const removed = sources.filter((s) => s.owner === ip);
       sources = sources.filter((s) => s.owner !== ip);
       for (const src of removed) {

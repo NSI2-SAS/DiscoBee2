@@ -60,6 +60,15 @@ function getGroupName(ip) {
   return f?.name || 'unknown';
 }
 
+function getWatchersForIp(ip) {
+  const f = findFilter(FILTERS, ip);
+  if (!f) return ['0.0.0.0/0'];
+  const def = (f.default || 'share').toLowerCase();
+  if (def === 'share') return ['0.0.0.0/0'];
+  const auth = Array.isArray(f.authorized) ? f.authorized : [];
+  return [f.range, ...auth];
+}
+
 function canShare(filters, sourceIp, hostIp) {
   const f = findFilter(filters, sourceIp);
   if (!f) return true;
@@ -175,13 +184,37 @@ discoveryServer.listen(DISCOVERY_PORT, () => {
 // Express API
 // ---------------------------------------------------------------------------
 app.get('/api/sources', (req, res) => {
-  const data = sources.map((s) => ({
-    name: s.name,
-    address: s.address,
-    port: s.port,
-    groups: s.groups,
-    groupName: getGroupName(s.address)
-  }));
+  const data = sources.map((s) => {
+    const f = findFilter(FILTERS, s.address);
+    return {
+      name: s.name,
+      address: s.address,
+      port: s.port,
+      groups: s.groups,
+      groupName: f?.name || 'unknown',
+      range: f?.range || 'unknown',
+      watchers: getWatchersForIp(s.address)
+    };
+  });
+  res.json(data);
+});
+
+app.get('/api/test', (req, res) => {
+  const ip = req.query.ip;
+  if (!ip) return res.json([]);
+  const allowed = sources.filter((s) => canShare(FILTERS, s.address, ip));
+  const data = allowed.map((s) => {
+    const f = findFilter(FILTERS, s.address);
+    return {
+      name: s.name,
+      address: s.address,
+      port: s.port,
+      groups: s.groups,
+      groupName: f?.name || 'unknown',
+      range: f?.range || 'unknown',
+      watchers: getWatchersForIp(s.address)
+    };
+  });
   res.json(data);
 });
 

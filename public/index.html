@@ -36,7 +36,7 @@
             border-radius: 5px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
-        #refreshButton, #searchInput {
+        #refreshButton, #searchInput, #testIpInput {
             padding: 10px;
             margin-right: 10px;
             font-size: 16px;
@@ -53,6 +53,11 @@
         }
         #searchInput {
             width: 200px;
+        }
+        .watchers-info {
+            font-size: 12px;
+            margin-left: 10px;
+            color: #333;
         }
         .instance-group {
             margin-bottom: 20px;
@@ -102,6 +107,7 @@
     <div class="content">
         <h1>NDI Sources</h1>
         <input type="text" id="searchInput" placeholder="Search sources...">
+        <input type="text" id="testIpInput" placeholder="Test IP...">
         <button id="refreshButton">Refresh Sources</button>
         <div id="sourceList"></div>
     </div>
@@ -110,7 +116,21 @@
         const sourceList = document.getElementById('sourceList');
         const refreshButton = document.getElementById('refreshButton');
         const searchInput = document.getElementById('searchInput');
+        const testIpInput = document.getElementById('testIpInput');
         let subnetState = JSON.parse(localStorage.getItem('subnetState')) || {};
+
+        function ipToInt(ip) {
+            return ip.split('.').reduce((acc, oct) => (acc << 8) + parseInt(oct, 10), 0) >>> 0;
+        }
+
+        function cidrMatch(ip, cidr) {
+            const [range, maskStr] = cidr.split('/');
+            const mask = maskStr ? parseInt(maskStr, 10) : 32;
+            const ipInt = ipToInt(ip);
+            const rangeInt = ipToInt(range);
+            const maskInt = mask === 0 ? 0 : (~0 << (32 - mask)) >>> 0;
+            return (ipInt & maskInt) === (rangeInt & maskInt);
+        }
 
         async function fetchSources() {
             try {
@@ -119,7 +139,12 @@
                     throw new Error('Network response was not ok');
                 }
                 const sources = await response.json();
-                displaySources(sources);
+                const ip = testIpInput.value.trim();
+                let filtered = sources;
+                if (ip) {
+                    filtered = sources.filter(src => src.watchers.some(c => cidrMatch(ip, c)));
+                }
+                displaySources(filtered);
                 filterSources();
             } catch (error) {
                 console.error('Error fetching sources:', error);
@@ -154,23 +179,36 @@
                 countSpan.className = 'subnet-count';
                 header.appendChild(countSpan);
 
+                const watchersSpan = document.createElement('span');
+                watchersSpan.className = 'watchers-info';
+                header.appendChild(watchersSpan);
+
                 const hostContainer = document.createElement('div');
                 hostContainer.style.display = expanded ? '' : 'none';
 
                 const hostCount = Object.keys(hosts).length;
                 const sourceCount = Object.values(hosts).reduce((acc, arr) => acc + arr.length, 0);
-                countSpan.textContent = expanded ? '' : ` (${hostCount} hosts, ${sourceCount} sources)`;
+                const updateHeader = () => {
+                    if (hostContainer.style.display === 'none') {
+                        countSpan.textContent = ` (${hostCount} hosts, ${sourceCount} sources)`;
+                        watchersSpan.textContent = ` [${info.watchers.join(', ')}]`;
+                    } else {
+                        countSpan.textContent = '';
+                        watchersSpan.textContent = '';
+                    }
+                };
+                updateHeader();
 
                 header.addEventListener('click', () => {
                     const isExpanded = hostContainer.style.display !== 'none';
                     if (isExpanded) {
                         hostContainer.style.display = 'none';
-                        countSpan.textContent = ` (${hostCount} hosts, ${sourceCount} sources)`;
+                        updateHeader();
                         toggleButton.textContent = '►';
                         subnetState[subnet] = false;
                     } else {
                         hostContainer.style.display = '';
-                        countSpan.textContent = '';
+                        updateHeader();
                         toggleButton.textContent = '▼';
                         subnetState[subnet] = true;
                     }
@@ -211,19 +249,9 @@
 
         function groupBySubnet(sources) {
             return sources.reduce((acc, source) => {
-                const parts = source.address.split('.');
-                let subnet;
-
-                if (parts[0] === '10' && parts[1] === '100') {
-                    subnet = parts.slice(0, 3).join('.') + '.0/24';
-                } else if (parts[0] === '10' && parts[1] === '64') {
-                    subnet = parts.slice(0, 2).join('.') + '.0.0/16';
-                } else {
-                    subnet = parts.slice(0, 3).join('.') + '.0/24';
-                }
-
+                const subnet = source.range || 'unknown';
                 if (!acc[subnet]) {
-                    acc[subnet] = { groupName: source.groupName || 'unknown', hosts: {} };
+                    acc[subnet] = { groupName: source.groupName || 'unknown', watchers: source.watchers || [], hosts: {} };
                 }
                 if (!acc[subnet].hosts[source.address]) {
                     acc[subnet].hosts[source.address] = [];
@@ -271,6 +299,7 @@
 
         refreshButton.addEventListener('click', fetchSources);
         searchInput.addEventListener('input', filterSources);
+        testIpInput.addEventListener('input', fetchSources);
 
         // Initial fetch
         fetchSources();

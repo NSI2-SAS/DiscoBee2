@@ -9,6 +9,15 @@ DiscoBee is a free tool developed by ByteHive that simplifies viewing NDI — Ne
 - Includes an API for programmatic access
 - Search for String in Source
 - Groups sources by subnet (/24 for 10.100.x.x and /16 for 10.64.x.x)
+
+## Requirements
+
+To run DiscoBee from source you will need the following tools installed:
+
+- **npm**
+- **Node.js**
+- **git**
+- **curl**
 ## Usage
 
 For Production environments, we recommend using one of the Prebuilt Binaries.

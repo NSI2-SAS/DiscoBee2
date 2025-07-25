@@ -1,14 +1,12 @@
-# DiscoBee
+# DiscoBee2 - non commercial improved NDI discovery server
 
-DiscoBee is a free tool developed by ByteHive that simplifies viewing NDI — Network Device Interface  sources registered on a Discovery server.
+DiscoBee2 is a free tool developed by NSI2 Consuting SAS and based on DiscoBee by ByteHive 
+It is an improved NDI Discovery Server trying to provide explicit domain features to limit discovery of sources from listener with one discovery server.
 
 ## Features
 
 - Display all NDI sources registered on a Discovery server
-- Currently supports localhost
-- Includes an API for programmatic access
-- Search for String in Source
-- Groups sources by subnet (/24 for 10.100.x.x and /16 for 10.64.x.x)
+- Groups sources declared in config.yaml
 
 ## Requirements
 
@@ -18,42 +16,11 @@ To run DiscoBee from source you will need the following tools installed:
 - **Node.js**
 - **git**
 - **curl**
-## Usage
 
-For Production environments, we recommend using one of the Prebuilt Binaries.
-
-### Linux 
- 1. Download the binary using curl : 
- ``` wget https://github.com/ByteHive/DiscoBee/releases/download/v0.1.0/discobee-linux-0-1 ```
- 2. Make it executable by running  : 
- ```chmod 777 discobee-linux-0-1```
- 3. Now you can run it using the following command:
-    ```sudo ./discobee-linux-0-1```
-#### Autostart
-1. Create a new file in /etc/systemd/system/ with a .service extension. Let's call it discobee.service:
-```sudo nano /etc/systemd/system/discobee.service  ```
-2. add the following content to the file : 
-```
-[Unit]
-Description=Discobee Linux Service
-After=network.target
-
-[Service]
-ExecStart=/home/ubuntu/discobee-linux-0-1
-Restart=on-failure
-User=root
-
-[Install]
-WantedBy=multi-user.target
-```
-3. close the editor and save
-4. Reload systems : 
-``` sudo systemctl daemon-reload ```
-6. Enable the service to start on boot:
-  ```sudo systemctl enable discobee.service ```
-8. Start the service:
-   ```sudo systemctl start discobee.service ```
 #### NDI Discovery Server Service
+
+Create a startup.sh file launching the start.sh script of the repository
+
 Create a systemd unit to launch the Discovery Server on boot:
 ```
 [Unit]
@@ -71,41 +38,13 @@ WorkingDirectory=/home/user
 [Install]
 WantedBy=multi-user.target
 ```
-## Development
-Clone this Repository and then run the following commands:
- npm install
- npm run start
-
-### Optional Proxy
-If you want to filter the sources returned by the discovery server, start the
-proxy using:
-```
-npm run proxy
-```
-
 
 ## API
 /api/sources 
 list all the available sources
-## Current Limitations
-
-- Only supports localhost as the Discovery server
-- No caching 
-- No automatic updates
-
-## Roadmap
-
-We're actively working on improving DiscoBee. Here are some features in development:
-
-- Support for multiple Discovery Servers and the ability to compare them
-- Expanding support to hosts other than localhost
 
 
+## Contact and license
 
-## Contact
+Contact web-entry --at-- nsi2.sturmel.com for any question, code is under MIT license and is aimed at non commercial uses. If you want to do any commercial use, see with the NDI SDK licensing. 
 
-Please open an Issue for Feature Requests and Issues. 
-
----
-
-Developed with ❤️ by ByteHive

@@ -27,6 +27,65 @@ function loadFilters(file) {
 }
 const FILTERS = loadFilters(CONFIG_FILE);
 
+// ---------------------------------------------------------------------------
+// Metrics helpers
+// ---------------------------------------------------------------------------
+// Map of host ip to metric info. Each entry keeps the last few state
+// transitions with their event time so Prometheus can scrape them even if it
+// doesn't poll fast enough. Accesses are protected by a simple mutex to avoid
+// race conditions when metrics are scraped while updates happen.
+const sourceStates = new Map();
+
+class Mutex {
+  constructor() {
+    this._queue = [];
+    this._locked = false;
+  }
+  lock() {
+    return new Promise((resolve) => {
+      if (this._locked) {
+        this._queue.push(resolve);
+      } else {
+        this._locked = true;
+        resolve();
+      }
+    });
+  }
+  unlock() {
+    if (this._queue.length > 0) {
+      const next = this._queue.shift();
+      next();
+    } else {
+      this._locked = false;
+    }
+  }
+}
+
+const metricsMutex = new Mutex();
+
+async function updateSourceMetric(src, state) {
+  await metricsMutex.lock();
+  try {
+    const f = findFilter(FILTERS, src.address);
+    const info = sourceStates.get(src.address) || {
+      range: f?.range || 'unknown',
+      name: f?.name || 'unknown',
+      host: src.address,
+      events: [],
+    };
+
+    info.events.push({ state, time: Date.now() });
+    // Keep only the last 10 events to avoid unbounded growth
+    if (info.events.length > 10) {
+      info.events.shift();
+    }
+
+    sourceStates.set(src.address, info);
+  } finally {
+    metricsMutex.unlock();
+  }
+}
+
 function ipToInt(ip) {
   return ip.split('.').reduce((acc, oct) => (acc << 8) + parseInt(oct, 10), 0) >>> 0;
 }
@@ -158,6 +217,7 @@ const discoveryServer = net.createServer((socket) => {
           owner: ip
         };
         sources.push(newSrc);
+        updateSourceMetric(newSrc, 1);
         console.log("new source",newSrc)
         for (const [sock, hIp] of hosts.entries()) {
           if (sock === socket) continue;
@@ -187,6 +247,7 @@ const discoveryServer = net.createServer((socket) => {
       const removed = sources.filter((s) => s.owner === ip);
       sources = sources.filter((s) => s.owner !== ip);
       for (const src of removed) {
+        updateSourceMetric(src, 0);
         for (const [sock, hIp] of hosts.entries()) {
           if (canShare(FILTERS, src.address, hIp)) {
             sock.write(buildRemoveSource(src));
@@ -239,6 +300,25 @@ app.get('/api/test', (req, res) => {
     };
   });
   res.json(data);
+});
+
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', 'text/plain; version=0.0.4');
+  let lines = '';
+  await metricsMutex.lock();
+  try {
+    for (const info of sourceStates.values()) {
+      for (const evt of info.events) {
+        lines +=
+          `ndi_source_state{range_subnet="${info.range}",range_name="${info.name}",host_ip="${info.host}"} ${evt.state} ${evt.time}\n`;
+      }
+      // Clear events once they have been exposed so they are sent only once
+      info.events = [];
+    }
+  } finally {
+    metricsMutex.unlock();
+  }
+  res.send(lines);
 });
 
 app.use(express.static(path.join(__dirname, 'public')));

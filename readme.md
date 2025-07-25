@@ -19,7 +19,9 @@ To run DiscoBee from source you will need the following tools installed:
 
 ## Use
 
-`node server.js`
+`npm i ; node server.js`
+
+The `start.sh` is dedicated to use with a configuration repo you have to have already, feel free to update it for your own use.
 
 ### Configuration
 

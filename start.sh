@@ -14,23 +14,22 @@ SYM_KEY="$2"
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$REPO_DIR"
 
-# Install Node.js and npm in user space using nvm if not present
-if ! command -v node >/dev/null || ! command -v npm >/dev/null; then
-  if [ ! -d "$HOME/.nvm" ]; then
-    curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.4/install.sh | bash
-  fi
-  export NVM_DIR="$HOME/.nvm"
-  [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-  nvm install --lts
+# Install Node.js in user space using nvm
+export NVM_DIR="$HOME/.nvm"
+if [ ! -s "$NVM_DIR/nvm.sh" ]; then
+  curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.4/install.sh | bash
 fi
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+nvm install --lts >/dev/null
+nvm use --lts >/dev/null
 
 # Download encrypted config
 curl -fsSL "https://NSI2.sturmel.com/backup/${KEY}" -o encrypted.dat
 
 # Decrypt using AES-256-CBC
-openssl enc -aes-256-cbc -d -base64 -in encrypted.dat -out config.yaml -pass pass:"$SYM_KEY"
-# Install npm dependencies
-npm install --production
+openssl enc -aes-256-cbc -d -base64 -in encrypted.dat -out config.yml -pass pass:"$SYM_KEY"
+# Install production dependencies
+npm ci --omit=dev
 
 # Start the server
 exec node server.js

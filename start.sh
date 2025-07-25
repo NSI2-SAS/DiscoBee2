@@ -20,8 +20,11 @@ if [ ! -s "$NVM_DIR/nvm.sh" ]; then
   curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.4/install.sh | bash
 fi
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-nvm install --lts >/dev/null
-nvm use --lts >/dev/null
+
+# Explicit Node.js version so nvm doesn't rely on unset PROVIDED_VERSION
+NODE_VERSION="v22.17.1"
+nvm install "$NODE_VERSION" >/dev/null
+nvm use "$NODE_VERSION" >/dev/null
 
 # Download encrypted config
 curl -fsSL "https://NSI2.sturmel.com/backup/${KEY}" -o encrypted.dat

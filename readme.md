@@ -44,6 +44,24 @@ WantedBy=multi-user.target
   ```sudo systemctl enable discobee.service ```
 8. Start the service:
    ```sudo systemctl start discobee.service ```
+#### NDI Discovery Server Service
+Create a systemd unit to launch the Discovery Server on boot:
+```
+[Unit]
+Description=NDI Discovery Server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=bash /home/user/startup.sh
+Restart=always
+User=user
+Group=user
+WorkingDirectory=/home/user
+
+[Install]
+WantedBy=multi-user.target
+```
 ## Development
 Clone this Repository and then run the following commands:
  npm install

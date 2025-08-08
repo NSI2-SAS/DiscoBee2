@@ -30,8 +30,8 @@ const FILTERS = loadFilters(CONFIG_FILE);
 // ---------------------------------------------------------------------------
 // Metrics helpers
 // ---------------------------------------------------------------------------
-// Map of host ip to metric info. Each entry keeps the last few state
-// transitions with their event time so Prometheus can scrape them even if it
+// Map of host ip to metric info. Each entry stores the last reported state
+// with its timestamp so Prometheus can scrape the current status even if it
 // doesn't poll fast enough. Accesses are protected by a simple mutex to avoid
 // race conditions when metrics are scraped while updates happen.
 const sourceStates = new Map();
@@ -71,14 +71,12 @@ async function updateSourceMetric(src, state) {
       range: f?.range || 'unknown',
       name: f?.name || 'unknown',
       host: src.address,
-      events: [],
+      state: 0,
+      time: Date.now(),
     };
 
-    info.events.push({ state, time: Date.now() });
-    // Keep only the last 300 events to avoid unbounded growth
-    if (info.events.length > 300) {
-      info.events.shift();
-    }
+    info.state = state;
+    info.time = Date.now();
 
     sourceStates.set(src.address, info);
   } finally {
@@ -311,12 +309,8 @@ app.get('/metrics', async (req, res) => {
   await metricsMutex.lock();
   try {
     for (const info of sourceStates.values()) {
-      for (const evt of info.events) {
-        lines +=
-          `ndi_source_state{range_subnet="${info.range}",range_name="${info.name}",host_ip="${info.host}"} ${evt.state} ${evt.time}\n`;
-      }
-      // Clear events once they have been exposed so they are sent only once
-      info.events = [];
+      lines +=
+        `ndi_source_state{range_subnet="${info.range}",range_name="${info.name}",host_ip="${info.host}"} ${info.state} ${info.time}\n`;
     }
   } finally {
     metricsMutex.unlock();

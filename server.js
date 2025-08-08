@@ -75,8 +75,8 @@ async function updateSourceMetric(src, state) {
     };
 
     info.events.push({ state, time: Date.now() });
-    // Keep only the last 10 events to avoid unbounded growth
-    if (info.events.length > 10) {
+    // Keep only the last 300 events to avoid unbounded growth
+    if (info.events.length > 300) {
       info.events.shift();
     }
 

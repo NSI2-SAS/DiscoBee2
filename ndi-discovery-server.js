@@ -201,7 +201,7 @@ const server = net.createServer((socket) => {
         }
       }
       pendingRemovals.delete(ip);
-    }, 5000);
+    }, 60000);
     pendingRemovals.set(ip, timeout);
   });
 });

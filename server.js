@@ -238,14 +238,14 @@ const discoveryServer = net.createServer((socket) => {
   socket.on('close', () => {
     hosts.delete(socket);
     console.log("Connection closed ",ip)
-    //if ([...hosts.values()].includes(ip)) {
-    //  return; // another connection from this IP is still active
-    //}
-    console.log("strarting timeout for ",ip)
+    if ([...hosts.values()].includes(ip)) {
+      return; // another connection from this IP is still active
+    }
+    console.log("starting timeout for ",ip)
     const timeout = setTimeout(() => {
-      //if ([...hosts.values()].includes(ip)) {
-      //  return; // reconnected during delay
-      //}
+      if ([...hosts.values()].includes(ip)) {
+        return; // reconnected during delay
+      }
       console.log("removing for",ip)
       const removed = sources.filter((s) => s.owner === ip);
       sources = sources.filter((s) => s.owner !== ip);
@@ -258,7 +258,7 @@ const discoveryServer = net.createServer((socket) => {
         }
       }
       pendingRemovals.delete(ip);
-    }, 5000);
+    }, 60000);
     pendingRemovals.set(ip, timeout);
   });
 });

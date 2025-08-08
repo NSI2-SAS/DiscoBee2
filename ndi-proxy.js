@@ -37,8 +37,10 @@ function same24(ip1, ip2) {
 
 // Create a TCP server to intercept client connections
 const server = net.createServer((clientSocket) => {
+  clientSocket.setKeepAlive(true, 1000);
   // Connect to the actual NDI server
   const serverSocket = net.createConnection({ host: NDI_HOST, port: NDI_PORT }, () => {
+    serverSocket.setKeepAlive(true, 1000);
     console.log(`Client connected: proxying to NDI at ${NDI_HOST}:${NDI_PORT}`);
   });
 

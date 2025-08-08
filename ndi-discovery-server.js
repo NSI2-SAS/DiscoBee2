@@ -132,6 +132,7 @@ const pendingRemovals = new Map(); // ip -> timeout
 const server = net.createServer((socket) => {
   const ip = socket.remoteAddress.replace(/^::ffff:/, '');
   hosts.set(socket, ip);
+  socket.setKeepAlive(true, 1000);
   if (pendingRemovals.has(ip)) {
     clearTimeout(pendingRemovals.get(ip));
     pendingRemovals.delete(ip);

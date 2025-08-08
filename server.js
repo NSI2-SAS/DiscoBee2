@@ -201,6 +201,8 @@ const discoveryServer = net.createServer((socket) => {
     if (str.includes('<query/>')) {
       const allowed = sources.filter((s) => canShare(FILTERS, s.address, ip));
       const xml = buildSources(allowed);
+      console.log("Sending XML to ",ip)
+      console.log(xml)
       socket.write(`${xml}\0`);
       return;
     }

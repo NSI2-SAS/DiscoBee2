@@ -179,6 +179,7 @@ const discoveryServer = net.createServer((socket) => {
   const ip = socket.remoteAddress.replace(/^::ffff:/, '');
   hosts.set(socket, ip);
   console.log("Hote connecte : ",ip)
+  socket.setKeepAlive(true, 1000);
   if (pendingRemovals.has(ip)) {
     console.log("stopping timeout for :",ip)
     clearTimeout(pendingRemovals.get(ip));

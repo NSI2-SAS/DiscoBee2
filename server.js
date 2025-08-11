@@ -177,12 +177,12 @@ const discoveryServer = net.createServer((socket) => {
   const ip = socket.remoteAddress.replace(/^::ffff:/, '');
   hosts.set(socket, ip);
   // Close any older connections from this IP to avoid duplicates
-  for (const [sock, hIp] of hosts.entries()) {
+  /*for (const [sock, hIp] of hosts.entries()) {
     if (hIp === ip && sock !== socket) {
       console.log("Closing older connection :", ip);
       sock.destroy();
     }
-  }
+  }*/
   console.log("Hote connecte : ",ip)
   socket.setKeepAlive(true, 1000);
   if (pendingRemovals.has(ip)) {

@@ -176,6 +176,13 @@ const pendingRemovals = new Map(); // ip -> timeout
 const discoveryServer = net.createServer((socket) => {
   const ip = socket.remoteAddress.replace(/^::ffff:/, '');
   hosts.set(socket, ip);
+  // Close any older connections from this IP to avoid duplicates
+  for (const [sock, hIp] of hosts.entries()) {
+    if (hIp === ip && sock !== socket) {
+      console.log("Closing older connection :", ip);
+      sock.destroy();
+    }
+  }
   console.log("Hote connecte : ",ip)
   socket.setKeepAlive(true, 1000);
   if (pendingRemovals.has(ip)) {
@@ -217,13 +224,18 @@ const discoveryServer = net.createServer((socket) => {
           groups: src.groups?.[0]?.group || ['public'],
           owner: ip
         };
-        sources.push(newSrc);
-        updateSourceMetric(newSrc, 1);
-        console.log("new source",newSrc)
-        for (const [sock, hIp] of hosts.entries()) {
-          if (sock === socket) continue;
-          if (canShare(FILTERS, newSrc.address, hIp)) {
-            sock.write(buildAddSource(newSrc));
+        const exists = sources.some(
+          (s) => s.name === newSrc.name && s.address === newSrc.address && s.port === newSrc.port
+        );
+        if (!exists) {
+          sources.push(newSrc);
+          updateSourceMetric(newSrc, 1);
+          console.log("new source",newSrc)
+          for (const [sock, hIp] of hosts.entries()) {
+            if (sock === socket) continue;
+            if (canShare(FILTERS, newSrc.address, hIp)) {
+              sock.write(buildAddSource(newSrc));
+            }
           }
         }
       } catch (e) {

@@ -127,16 +127,12 @@ const PORT = parseInt(process.env.PORT || '5959', 10);
 
 const hosts = new Map(); // socket -> ip
 let sources = [];
-const pendingRemovals = new Map(); // ip -> timeout
+const pendingRemovals = new Map(); // source -> timeout
 
 const server = net.createServer((socket) => {
   const ip = socket.remoteAddress.replace(/^::ffff:/, '');
   hosts.set(socket, ip);
   socket.setKeepAlive(true, 1000);
-  if (pendingRemovals.has(ip)) {
-    clearTimeout(pendingRemovals.get(ip));
-    pendingRemovals.delete(ip);
-  }
 
   socket.on('error', (err) => {
     if (err.code === 'EPIPE' || err.code === 'ECONNRESET') {
@@ -165,14 +161,25 @@ const server = net.createServer((socket) => {
           address: (src.address?.[0] === '0.0.0.0' ? ip : src.address?.[0]) || ip,
           port: src.port?.[0] || '5961',
           groups: src.groups?.[0]?.group || ['public'],
-          owner: ip
+          owners: new Set([socket])
         };
-        console.log("adding",newSrc)
-        sources.push(newSrc);
-        for (const [sock, hIp] of hosts.entries()) {
-          if (sock === socket) continue;
-          if (canShare(CONFIG.filters, newSrc.address, hIp)) {
-            sock.write(buildAddSource(newSrc));
+        const existing = sources.find(
+          (s) => s.name === newSrc.name && s.address === newSrc.address && s.port === newSrc.port
+        );
+        if (!existing) {
+          console.log("adding", newSrc);
+          sources.push(newSrc);
+          for (const [sock, hIp] of hosts.entries()) {
+            if (sock === socket) continue;
+            if (canShare(CONFIG.filters, newSrc.address, hIp)) {
+              sock.write(buildAddSource(newSrc));
+            }
+          }
+        } else {
+          existing.owners.add(socket);
+          if (pendingRemovals.has(existing)) {
+            clearTimeout(pendingRemovals.get(existing));
+            pendingRemovals.delete(existing);
           }
         }
       } catch (e) {
@@ -184,25 +191,26 @@ const server = net.createServer((socket) => {
 
   socket.on('close', () => {
     hosts.delete(socket);
-    if ([...hosts.values()].includes(ip)) {
-      return; // another connection from this IP is still active
-    }
-    const timeout = setTimeout(() => {
-      if ([...hosts.values()].includes(ip)) {
-        return; // reconnected during delay
-      }
-      const removed = sources.filter((s) => s.owner === ip);
-      sources = sources.filter((s) => s.owner !== ip);
-      for (const src of removed) {
-        for (const [sock, hIp] of hosts.entries()) {
-          if (canShare(CONFIG.filters, src.address, hIp)) {
-            sock.write(buildRemoveSource(src));
-          }
+    for (const src of sources) {
+      if (src.owners.has(socket)) {
+        src.owners.delete(socket);
+        if (src.owners.size === 0 && !pendingRemovals.has(src)) {
+          const timeout = setTimeout(() => {
+            if (src.owners.size === 0) {
+              const removed = src;
+              sources = sources.filter((s) => s !== removed);
+              for (const [sock, hIp] of hosts.entries()) {
+                if (canShare(CONFIG.filters, removed.address, hIp)) {
+                  sock.write(buildRemoveSource(removed));
+                }
+              }
+            }
+            pendingRemovals.delete(src);
+          }, 60000);
+          pendingRemovals.set(src, timeout);
         }
       }
-      pendingRemovals.delete(ip);
-    }, 60000);
-    pendingRemovals.set(ip, timeout);
+    }
   });
 });
 

@@ -14,14 +14,14 @@ SYM_KEY="$2"
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$REPO_DIR"
 
-if [ ! -f config.yaml ]; then
-  echo "config.yaml not found" >&2
+if [ ! -f config.yml ]; then
+  echo "config.yml not found" >&2
   exit 1
 fi
 
 # Encrypt config.yaml using AES-256-CBC and base64
-openssl enc -aes-256-cbc -e -base64 -in config.yaml -out encrypted.dat -pass pass:"$SYM_KEY"
+openssl enc -aes-256-cbc -e -base64 -in config.yml -out encrypted.dat -pass pass:"$SYM_KEY"
 
 # Upload via POST
-curl -fsSL -X POST -H "Content-Type: application/octet-stream" --data-binary @encrypted.dat "https://NSI2.sturmel.com/backup/${KEY}"
+curl -fsSL -X PUT -H "Content-Type: application/octet-stream" --data-binary @encrypted.dat "https://NSI2.sturmel.com/backup/${KEY}"
 

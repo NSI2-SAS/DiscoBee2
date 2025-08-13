@@ -262,7 +262,9 @@
                     localStorage.setItem('subnetState', JSON.stringify(subnetState));
                 });
 
-                for (const [instance, instanceSources] of Object.entries(hosts)) {
+                const sortedHosts = Object.entries(hosts)
+                    .sort(([ipA], [ipB]) => ipA.localeCompare(ipB, undefined, { numeric: true, sensitivity: 'base' }));
+                for (const [instance, instanceSources] of sortedHosts) {
                     const instanceDiv = document.createElement('div');
                     instanceDiv.className = 'instance-group';
                     instanceDiv.innerHTML = `<h3>${instance}</h3>`;

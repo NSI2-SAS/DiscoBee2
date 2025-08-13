@@ -98,6 +98,40 @@
         ul{
             list-style: none!important;
         }
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 280px;
+            background-color: #555;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .tooltip .tooltiptext::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: #555 transparent transparent transparent;
+        }
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
     </style>
 </head>
 <body>
@@ -106,8 +140,14 @@
     </div>
     <div class="content">
         <h1>NDI Sources</h1>
-        <input type="text" id="searchInput" placeholder="Search sources...">
-        <input type="text" id="testIpInput" placeholder="Test IP...">
+        <div class="tooltip">
+            <input type="text" id="searchInput" placeholder="Search sources...">
+            <span class="tooltiptext">Use this field to filter sources view, any piece of text that can be found in the source - IP, name, group</span>
+        </div>
+        <div class="tooltip">
+            <input type="text" id="testIpInput" placeholder="Test IP...">
+            <span class="tooltiptext">Use this field to test what sources an IP would see, the field expects an IP address</span>
+        </div>
         <button id="refreshButton">Refresh Sources</button>
         <div id="sourceList"></div>
     </div>

@@ -1,41 +1,45 @@
-# DiscoBee2 - non commercial improved NDI discovery server
+# DiscoBee2
 
-DiscoBee2 is a free tool developed by NSI2 Consuting SAS and based on DiscoBee by ByteHive 
-It is an improved NDI Discovery Server trying to provide explicit domain features to limit discovery of sources from listener with one discovery server.
+DiscoBee2 is a free and non-commercial NDI discovery server developed by NSI2 Consulting SAS and based on DiscoBee by ByteHive. It is intended as a drop-in replacement for the discovery server distributed with the official NDI SDK. DiscoBee2 adds explicit domain filters that limit which NDI sources are visible to listeners and exports Prometheus metrics for monitoring.
 
 ## Features
 
-- Display all NDI sources registered on a Discovery server
-- Groups sources declared in config.yaml
+- Web interface showing all NDI sources registered on the discovery server
+- Source grouping and access control defined in `config.yml`
+- Prometheus metrics endpoint at `/metrics` exposing source status
+- Simple REST API for querying sources
 
 ## Requirements
 
-To run DiscoBee from source you will need the following tools installed:
+To run DiscoBee2 from source you need:
 
-- **npm**
 - **Node.js**
+- **npm**
 - **git**
 - **curl**
 
-## Use
+## Usage
 
-`npm i ; node server.js`
+```bash
+npm install
+npm start
+```
 
-The `start.sh` is dedicated to use with a configuration repo you have to have already, feel free to update it for your own use.
+`start.sh` is intended for use with an external configuration repository; adapt it to your own workflow if needed.
 
 ### Configuration
 
-A yaml table is in config.yml, with
-- range : the source subnet ip
-- name: the range name to be dispayed on the webpage
-- default : default bahaviour: share or block for everyone
-- authorized: list of subnets authorized to view the source
+Edit `config.yml` and define one or more filters:
 
-### NDI Discovery Server Service
+- `range`: subnet of the source (CIDR notation)
+- `name`: label shown on the web page
+- `default`: `share` or `block` to control the default visibility
+- `authorized`: list of subnets permitted to see the source
 
-Create a startup.sh file launching the start.sh script of the repository
+### Systemd service
 
-Create a systemd unit to launch the Discovery Server on boot:
+Create a `startup.sh` script that launches `start.sh`, then add a systemd unit:
+
 ```
 [Unit]
 Description=NDI Discovery Server
@@ -43,7 +47,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=bash /home/user/startup.sh
+ExecStart=/bin/bash /home/user/startup.sh
 Restart=always
 User=user
 Group=user
@@ -54,13 +58,11 @@ WantedBy=multi-user.target
 ```
 
 ## API
-/api/sources 
-list all the available sources
 
+- `GET /api/sources` – list all available sources
 
 ## Contact and license
 
-Contact web-entry --at-- nsi2.sturmel.com for any question, code is under MIT license and is aimed at non commercial uses. If you want to do any commercial use, see with the NDI SDK licensing. 
+Contact `web-entry --at-- nsi2.sturmel.com` for any question. Code is under the MIT license and intended for non-commercial use. For commercial usage, refer to NDI SDK licensing.
 
-This software comes with no support no garantees that it ill remain functionnal as it is based on the current NDI protocol subject to change anty time.
-
+This software comes with no support and no guarantee that it will remain functional as the NDI protocol may change at any time.

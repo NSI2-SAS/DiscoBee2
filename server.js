@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
 const xml2js = require('xml2js');
+const { validateSubnet } = require('./subnet-config');
 
 // Ports for the two services
 const WEB_PORT = parseInt(process.env.WEB_PORT || '8080', 10);
@@ -25,7 +26,7 @@ function loadFilters(file) {
     return [];
   }
 }
-const FILTERS = loadFilters(CONFIG_FILE);
+let FILTERS = loadFilters(CONFIG_FILE);
 
 // ---------------------------------------------------------------------------
 // Metrics helpers
@@ -281,6 +282,65 @@ discoveryServer.listen(DISCOVERY_PORT, () => {
 // ---------------------------------------------------------------------------
 // Express API
 // ---------------------------------------------------------------------------
+app.use(express.json({ limit: '32kb' }));
+
+app.get('/api/subnets', (req, res) => res.json(FILTERS));
+
+function saveSubnet(req, res) {
+  // Browser writes must originate from this application.
+  if ((req.get('Origin') && req.get('Origin') !== req.protocol + '://' + req.get('host')) ||
+      req.get('Sec-Fetch-Site') === 'cross-site') {
+    return res.status(403).json({ error: 'Origine non autorisée.' });
+  }
+  const editing = req.method === 'PUT';
+  const index = editing ? Number(req.params.index) : -1;
+  if (editing && (!/^\d+$/.test(req.params.index) || !Number.isSafeInteger(index) || index >= FILTERS.length)) {
+    return res.status(404).json({ error: 'Sous-réseau introuvable.' });
+  }
+  let filter;
+  try {
+    filter = validateSubnet(req.body, FILTERS, index);
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+  const next = FILTERS.slice();
+  if (editing) next[index] = { ...next[index], ...filter };
+  else next.push(filter);
+  const temporary = CONFIG_FILE + '.tmp';
+  try {
+    // Preserve configuration keys unrelated to subnet filters.
+    const config = yaml.load(fs.readFileSync(CONFIG_FILE, 'utf8')) || {};
+    if (typeof config !== 'object' || Array.isArray(config)) throw new Error('Invalid configuration');
+    fs.writeFileSync(temporary, yaml.dump({ ...config, filters: next }), { mode: 0o600 });
+    fs.renameSync(temporary, CONFIG_FILE);
+  } catch (error) {
+    try { fs.unlinkSync(temporary); } catch {}
+    console.error('Failed to save config:', error.message);
+    return res.status(500).json({ error: 'Impossible de sauvegarder la configuration.' });
+  }
+  const previous = FILTERS;
+  FILTERS = next;
+  for (const info of sourceStates.values()) {
+    const match = findFilter(FILTERS, info.host);
+    info.range = match?.range || 'unknown';
+    info.name = match?.name || 'unknown';
+  }
+  // Notify connected listeners when an existing source becomes visible or hidden.
+  for (const [socket, ip] of hosts) {
+    if (socket.destroyed || !socket.writable) continue;
+    for (const source of sources) {
+      if (source.owners.has(socket)) continue;
+      const before = canShare(previous, source.address, ip);
+      const after = canShare(FILTERS, source.address, ip);
+      if (before !== after) socket.write(after ? buildAddSource(source) : buildRemoveSource(source));
+    }
+  }
+  res.status(editing ? 200 : 201).json(filter);
+}
+
+app.post('/api/subnets', saveSubnet);
+app.put('/api/subnets/:index', saveSubnet);
+
 app.get('/api/sources', (req, res) => {
   const data = sources.map((s) => {
     const f = findFilter(FILTERS, s.address);
@@ -323,7 +383,7 @@ app.get('/metrics', async (req, res) => {
   try {
     for (const info of sourceStates.values()) {
       lines +=
-        `ndi_source_state{range_subnet="${info.range}",range_name="${info.name}",host_ip="${info.host}"} ${info.state} ${info.time}\n`;
+        `ndi_source_state{range_subnet=${JSON.stringify(info.range)},range_name=${JSON.stringify(info.name)},host_ip=${JSON.stringify(info.host)}} ${info.state} ${info.time}\n`;
     }
   } finally {
     metricsMutex.unlock();
@@ -339,3 +399,4 @@ app.get('*', (req, res) => {
 app.listen(WEB_PORT, () => {
   console.log(`Web server running at http://localhost:${WEB_PORT}`);
 });
+

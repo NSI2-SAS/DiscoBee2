@@ -10,7 +10,8 @@
             margin: 0 auto;
             padding: 0;
             background-color: #f0f0f0;
-            width: 800px;
+            width: 100%;
+            max-width: 800px;
         }
         .top-bar {
             background-color: #333;
@@ -132,6 +133,12 @@
             visibility: visible;
             opacity: 1;
         }
+        #configuration { margin-bottom: 20px; padding: 16px; background: white; border-radius: 5px; }
+        #configuration label { display: block; margin: 12px 0; }
+        #configuration input, #configuration select, #configuration textarea { display: block; box-sizing: border-box; width: 100%; padding: 8px; margin-top: 5px; }
+        #configuration button, #configurationToggle { padding: 8px 12px; cursor: pointer; }
+        #subnetList li { margin: 10px 0; }
+        #configStatus { white-space: pre-wrap; }
     </style>
 </head>
 <body>
@@ -139,6 +146,22 @@
         DiscoBee by Bytehive - v0.1 (upgraded by NSI2 Consulting SAS - Apache license)
     </div>
     <div class="content">
+        <button id="configurationToggle" aria-expanded="false" aria-controls="configuration">Configuration</button>
+        <section id="configuration" hidden aria-labelledby="configTitle">
+            <h2 id="configTitle">Configuration des sous-réseaux</h2>
+            <ul id="subnetList"></ul>
+            <button id="addSubnet" type="button" disabled>Ajouter un sous-réseau</button>
+            <form id="subnetForm" hidden>
+                <h3 id="subnetFormTitle">Ajouter un sous-réseau</h3>
+                <label>Nom<input id="subnetName" required maxlength="100"></label>
+                <label>Sous-réseau IPv4 (CIDR)<input id="subnetRange" required placeholder="192.168.1.0/24"></label>
+                <label>Partage par défaut<select id="subnetDefault"><option value="share">Partager avec tous</option><option value="block">Limiter au sous-réseau et aux réseaux autorisés</option></select></label>
+                <label>Réseaux autorisés (un CIDR par ligne)<textarea id="subnetAuthorized" rows="4" placeholder="192.168.2.0/24"></textarea></label>
+                <button id="saveSubnet" type="submit">Enregistrer</button>
+                <button id="cancelSubnet" type="button">Annuler</button>
+            </form>
+            <p id="configStatus" role="status" aria-live="polite"></p>
+        </section>
         <h1>NDI Sources</h1>
         <div class="tooltip">
             <input type="text" id="searchInput" placeholder="Search sources...">
@@ -152,6 +175,7 @@
         <div id="sourceList"></div>
     </div>
 
+    <script src="/configuration.js" defer></script>
     <script>
         const sourceList = document.getElementById('sourceList');
         const refreshButton = document.getElementById('refreshButton');
@@ -356,3 +380,4 @@
     </script>
 </body>
 </html>
+
